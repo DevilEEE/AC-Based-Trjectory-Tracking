@@ -1,0 +1,17 @@
+function [Mayer, Lagrange] = landingCost(sol)
+
+%global CONSTANTS;
+
+t = sol.time;
+u = sol.control;
+xf = sol.terminal.state;
+
+%Lagrange = u(1)./(( CONSTANTS.g0 * CONSTANTS.ISP).*ones(size(t)));
+%Mayer = 0;
+
+Lagrange = zeros(size(t));
+Mayer = -xf(4)+2400;
+
+        
+
+

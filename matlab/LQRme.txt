@@ -1,0 +1,56 @@
+function [new_control, A, B, K, costate, delta_state, delta_control] = LQRme(state, state_ref, control_ref, ac_control)
+global CONSTANTS;
+r = state(1);
+vt = state(2);
+vr = state(3);
+m = state(4);
+r_ref = state_ref(1);
+vt_ref = state_ref(2);
+vr_ref = state_ref(3);
+m_ref = state_ref(4);
+Tt_ref = control_ref(1);
+Tr_ref = control_ref(2);
+
+A = [0  0 1  0;
+    -vt*vr/(r^2) vr/r vt/r Tt_ref/(m^2);
+    vt^2/(r^2)-2*CONSTANTS.mu/(r^3) -2*vt/r 0 Tr_ref/(m^2);
+    0 0 0 0];
+B = [0 0;
+    -1/m 0;
+    0 -1/m;
+    -sign(Tt_ref)/(CONSTANTS.ISP*CONSTANTS.g0) -sign(Tr_ref)/(CONSTANTS.ISP*CONSTANTS.g0)];
+Q = [0.4   0    0   0;
+     0    4.238  0   0;
+     0    0    2294.2  0;
+     0    0    0   0.012];
+%12, 6, 3, 6
+R = [1 0;
+     0 1];
+[K, S, E] = lqr(A, B, Q, R);
+delta_r = r - r_ref;
+delta_vt = vt - vt_ref;
+delta_vr = vr - vr_ref;
+delta_m = m - m_ref;
+delta_state = [delta_r;delta_vt;delta_vr;delta_m];
+delta_control =  -K*delta_state;
+costate = S*delta_state;
+%y = [0;0];
+delta_Tt = delta_control(1);
+delta_Tr = delta_control(2);
+new_Tt = Tt_ref + delta_Tt;
+new_Tr = Tr_ref + delta_Tr;
+if new_Tt > 10000.0
+    new_Tt = 10000.0;
+end
+if new_Tt < -10000
+    new_Tt = -10000;
+end
+if new_Tr > 10000
+    new_Tr = 10000;
+end
+if new_Tr < -10000
+    new_Tr = -10000;
+end
+new_control = [Tt_ref+ac_control(1); Tr_ref+ac_control(2)];
+%new_control = [Tt_ref; Tr_ref];
+%new_control = [new_Tt; new_Tr];

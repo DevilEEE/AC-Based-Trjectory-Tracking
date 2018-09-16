@@ -1,0 +1,3 @@
+function ac_control_list = myfread(path)
+temp = load(path);
+ac_control_list = temp.A;

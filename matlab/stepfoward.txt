@@ -1,0 +1,13 @@
+function [nextstate] = stepfoward(state, control, T)
+global CONSTANTS;
+r = state(1);
+vt = state(2);
+vr = state(3);
+m = state(4);
+Tt = control(1);
+Tr = control(2);
+new_r = r - vr*T;
+new_vt = vt + (vt*vr/r - Tt/m)*T;
+new_vr = vr + (-(Tr/m) - vt*vt/r + CONSTANTS.mu/r/r)*T;
+new_m = m +  (-(abs(Tt)+abs(Tr))./(CONSTANTS.ISP*CONSTANTS.g0))*T;
+nextstate = [new_r new_vt new_vr new_m];

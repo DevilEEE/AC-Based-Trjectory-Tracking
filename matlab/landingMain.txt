@@ -1,0 +1,203 @@
+clear setup guess limits linkages
+
+global CONSTANTS
+CONSTANTS.mu = 4.9e12;
+CONSTANTS.Re = 1738000.0;
+CONSTANTS.g0 = 9.80665;
+CONSTANTS.ISP = 2940.0;
+
+r0 = 1753000.0;
+rf = 0.0;
+vr0 = 0.0;
+vt0 = 1691.8;
+vrf = 0.0;
+vtf = 0.0;
+m0 = 2400.0;
+mf = 1200.0;
+vmin = 0.0;
+vmax = 1691.8;
+%Bmin = -1.57;
+%Bmax = 1.57;
+%vBmin = -20;
+%vBmax = 20;
+
+
+rmin = CONSTANTS.Re;
+rmax = CONSTANTS.Re + 15000.0;
+Ttmin = -7500;
+Ttmax = 7500;
+Trmin = -7500;
+Trmax = 7500;
+
+iphase = 1;
+limits(iphase).time.min = [0; 300];
+limits(iphase).time.max = [0; 800];
+limits(iphase).state.min(1, :) = [r0 rmin rmin];
+limits(iphase).state.max(1, :) = [r0 rmax rmin];
+limits(iphase).state.min(2, :) = [vt0 vmin vmin];
+limits(iphase).state.max(2, :) = [vt0 vmax vmin];
+limits(iphase).state.min(3, :) = [vr0 vmin vmin];
+limits(iphase).state.max(3, :) = [vr0 vmax vmin];
+limits(iphase).state.min(4, :) = [m0 mf mf];
+limits(iphase).state.max(4, :) = [m0 m0 m0];
+%limits(iphase).state.min(5, :) = [-90 -90 -90];
+%limits(iphase).state.max(5, :) = [90 90 90];
+
+limits(iphase).control.min(1, :) = Ttmin;
+limits(iphase).control.max(1, :) = Ttmax;
+limits(iphase).control.min(2, :) = Trmin;
+limits(iphase).control.max(2, :) = Trmax;
+%limits(iphase).control.min(3, :) = vBmin;
+%limits(iphase).control.max(3, :) = vBmax;
+
+limits(iphase).parameter.min = [];
+limits(iphase).parameter.max = [];
+
+limits(iphase).path.min = 7500*7500;
+limits(iphase).path.max = 7500*7500;
+
+guess(iphase).time = [0; 100];
+guess(iphase).state(:, 1) = [r0; r0];
+guess(iphase).state(:, 2) = [vt0; vt0];
+guess(iphase).state(:, 3) = [vr0; vr0];
+guess(iphase).state(:, 4) = [m0; mf];
+%guess(iphase).state(:, 5) = [-90; 90];
+
+guess(iphase).control(:, 1) = [1500; 1500];
+guess(iphase).control(:, 2) = [-45; 45];
+%guess(iphase).control(:, 3) = [0; 0];
+
+
+guess(iphase).parameter = [];
+
+setup.name = 'soft landing';
+setup.funcs.cost = 'landingCost';
+setup.funcs.dae = 'landingDae';
+setup.derivatives = 'finite-difference';
+setup.checkDerivatives = 0;
+setup.limits = limits;
+setup.guess = guess;
+setup.linkages = [];
+setup.autoscale = 'on';
+
+setup.mesh.tolerance = 1e-6;
+setup.mesh.iteration = 1;
+setup.mesh.nodesPerInterval.min = 8;
+setup.mesh.nodesPerInterval.max = 10;
+
+[output, gpopsHistory] = gpops(setup);
+solutionPlot = output.solutionPlot;
+solution = output.solution;
+
+%LQR trajectory tracking control
+Size = size(output.solutionPlot.state);
+State = output.solutionPlot.state;
+Control = output.solutionPlot.control;
+Time = output.solutionPlot.time;
+Len = Size(1);
+new_state = zeros(Size(1), Size(2));
+costate_list = zeros(Size(1), Size(2));
+delta_control_list = zeros(Size(1), 2);
+delta_state_list = zeros(Size(1), Size(2));
+new_control_list = zeros(Size(1), 2);
+new_control_list(1,:) = Control(1,:);
+ac_control_list = myfread('D:\matlab_ac_control_list.mat');
+new_state(1,:) = State(1,:) + [200, 5, 8, 0];
+new_control = [0;0];
+A = ones(4,4);
+B = ones(4,2);
+I = [1 0 0 0;
+     0 1 0 0;
+     0 0 1 0;
+     0 0 0 1];
+for i=1:1:(Len-1)
+    T = Time(i+1)-Time(i);
+    [new_control, A, B, K, costate, delta_state, delta_control] = LQRme(new_state(i,:), State(i,:), Control(i,:), ac_control_list(i,:));
+    new_control_list(i+1,:) = transpose(new_control);
+    costate_list(i,:) = transpose(costate);
+    delta_state_list(i,:) = transpose(delta_state);
+    delta_control_list(i,:) = transpose(delta_control);
+    %Ak = expm(A*T);
+    %Bk = (expm(A*T)-expm(A*0))*B;
+    
+    %Ak = A*T + I;
+    %Bk = B*T;
+    %Bk = integral(@(t)exp(A*t)*B, 0, T);
+    %y = Ak*transpose(new_state(i,:)) + Bk*new_control;
+    y = stepfoward(new_state(i,:), new_control, T);
+    new_state(i+1,:) = transpose(y);
+end
+
+grid on
+figure(1)
+plot(output.solutionPlot.time, new_state(:,1), '--r')
+xlabel('(a) State r vs t')
+ylabel('r')
+hold on
+plot(output.solutionPlot.time,output.solutionPlot.state(:,1))
+xlabel('(a) State r vs t')
+ylabel('r')
+hold off
+
+grid on
+figure(2)
+plot(output.solutionPlot.time, new_state(:,2), '--r')
+xlabel('(a) State vt vs t')
+ylabel('vt')
+hold on
+plot(output.solutionPlot.time,output.solutionPlot.state(:,2))
+xlabel('(a) State vt vs t')
+ylabel('vt')
+hold off
+
+grid on
+figure(3)
+plot(output.solutionPlot.time, new_state(:,3), '--r')
+xlabel('(a) State vr vs t')
+ylabel('vr')
+hold on
+plot(output.solutionPlot.time,output.solutionPlot.state(:,3))
+xlabel('(a) State vr vs t')
+ylabel('vr')
+hold off
+
+grid on
+figure(4)
+plot(output.solutionPlot.time, new_state(:,4), '--r')
+xlabel('(a) State m vs t')
+ylabel('m')
+hold on
+plot(output.solutionPlot.time,output.solutionPlot.state(:,4))
+xlabel('(a) State m vs t')
+ylabel('m')
+hold off
+
+figure(5)
+plot(output.solutionPlot.time, new_control_list(:,1), '--r')
+xlabel('(b) Control Tt vs t')
+ylabel('Tt')
+hold on
+plot(output.solutionPlot.time,output.solutionPlot.control(:,1))
+xlabel('(b) Control Tt vs t')
+ylabel('Tt')
+hold off
+
+figure(6)
+plot(output.solutionPlot.time, new_control_list(:,2), '--r')
+xlabel('(b) Control Tr vs t')
+ylabel('Tr')
+hold on
+plot(output.solutionPlot.time,output.solutionPlot.control(:,2))
+xlabel('(b) Control Tr vs t')
+ylabel('Tr')
+hold off
+output.cost
+
+myfwrite('D:\matlab_new_control_list.txt', new_control_list);
+myfwrite('D:\matlab_new_state.txt', new_state);
+myfwrite('D:\matlab_State.txt', State);
+myfwrite('D:\matlab_costate.txt', costate_list);
+myfwrite('D:\matlab_Control.txt', Control);
+myfwrite('D:\matlab_delta_control_list.txt', delta_control_list);
+myfwrite('D:\matlab_delta_state_list.txt', delta_state_list);
+myfwrite('D:\matlab_Time.txt', Time);

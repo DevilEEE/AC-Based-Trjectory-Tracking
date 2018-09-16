@@ -1,0 +1,34 @@
+function [dae] = landingDae(sol)
+
+global CONSTANTS;
+iphase = sol.phase;
+x = sol.state;
+u = sol.control;
+p = sol.parameter;
+t = sol.time;
+x1 = x(:, 1);
+x2 = x(:, 2);
+x3 = x(:, 3);
+x4 = x(:, 4);
+%x5 = x(:, 5);
+Tt = u(:, 1);
+Tr = u(:, 2);
+%vB = u(:, 3);
+
+if iphase == 1,
+    x1dot = -x3;
+    x2dot = x2.*x3./x1 - Tt./x4;
+    x3dot = -(Tr./x4) - x2.*x2./x1 + CONSTANTS.mu./x1./x1;
+    x4dot = -(abs(Tt)+abs(Tr))./(CONSTANTS.ISP*CONSTANTS.g0);
+    path = Tt(:,1).^2 + Tr(:,1).^2;
+    %x5dot = vB;
+  
+    %path = ones(size(x1));
+    
+elseif iphase == 2,
+    %path = T.^2 + B.^2;
+end;
+
+dae = [x1dot x2dot x3dot x4dot path];
+
+

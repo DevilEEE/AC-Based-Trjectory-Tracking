@@ -1,0 +1,14 @@
+function flag = myfwrite(path, p)
+fid=fopen(path,'wt');%写入文件路径
+[m,n]=size(p);                   %获取矩阵的大小，p为要输出的矩阵
+for i=1:1:m
+for j=1:1:n
+if j==n                    %如果一行的个数达到n个则换行，否则空格
+fprintf(fid,'%4.3f\n',p(i,j)); 
+else
+fprintf(fid,'%4.3f\t',p(i,j));
+end
+end
+end
+fclose(fid);
+flag = 1;
