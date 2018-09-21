@@ -13,10 +13,11 @@ from torch.autograd import Variable as V
 import numpy as np
 
 LOAD_PRE_MODEL = True #if you wanna repretrain the AC model make it False
-AC_MAX_ITERS = 500
+AC_MAX_ITERS = 5000
 LR = 0.01
 gamma = 0.9
 Q = np.array([[0.5, 0, 0, 0],[0, 4, 0, 0],[0, 0, 2500, 0],[0, 0, 0, 0.01]])
+#Q = np.array([[2, 0, 0, 0],[0, 4, 0, 0],[0, 0, 2000, 0],[0, 0, 0, 0.04]])
 R = np.array([[1, 0],[0, 1]])
 INIT_Q = matlab.single(Q.tolist()) 
 FOR_R = matlab.single(R.tolist())
@@ -24,19 +25,21 @@ FOR_R = matlab.single(R.tolist())
 class ENV():
     def __init__(self):
         self.q1 = 0.5
-        self.q2 = 4
+        self.q2 = 5
         self.q3 = 2500
-        self.q4 = 0.01
+        self.q4 = 0.02
         self.Q = INIT_Q
         self.R = FOR_R
         self.ref_score = 0
         self.eng = matlab.engine.start_matlab()
         self.count = 0
+        #self.agent = Agent()
         
     def step(self, a_q, reset=False):
-        minNum = min(a_q)
-        maxNum = max(a_q)
-        a_q = [0.4*(w-minNum)/(maxNum-minNum)+0.8 for w in a_q]
+        #minNum = min(a_q)
+        #maxNum = max(a_q)
+        #a_q = [0.4*(w-minNum)/(maxNum-minNum)+0.8 for w in a_q]
+        #a_q = [0.4*w+0.8 for w in a_q]
         # renew the Q matrix:
         if not reset:
             self.count += 1
@@ -44,6 +47,9 @@ class ENV():
             q2 = a_q[1]*self.q2 
             q3 = a_q[2]*self.q3
             q4 = a_q[3]*self.q4
+            #q2 = self.q2 
+            #q3 = self.q3
+            #q4 = self.q4
             self.Q = matlab.single([[q1, 0, 0, 0], [0, q2, 0, 0], [0, 0, q3, 0], [0, 0, 0, q4]])
         # return value:
         count = 1
@@ -58,7 +64,8 @@ class ENV():
         R = self.R
         for i in range(4):
             total_r -= abs(delta_s[i])
-            next_state[i] += (abs(delta_s[i]) - next_state[i])*1./count
+            #next_state[i] += (abs(delta_s[i]) - next_state[i])*1./count
+            next_state[i] += ((delta_s[i]) - next_state[i])*1./count
         while True:
             delta_r, delta_vt, delta_vr, delta_m = delta_s
             r, vt, vr, m = agent.state[agent.now]
@@ -80,12 +87,13 @@ class ENV():
             for i in range(4):
                 count += 1
                 total_r -= abs(delta_s[i])
-                next_state[i] += (abs(delta_s[i]) - next_state[i])*1./count
+                #next_state[i] += (abs(delta_s[i]) - next_state[i])*1./count
+                next_state[i] += ((delta_s[i]) - next_state[i])*1./count
             if done == True:
                 break
         if self.count >= AC_MAX_ITERS:
             over = True
-        return next_state, total_r/count, over
+        return next_state, total_r/count , over
     
     def reset(self):
         a_q = [self.q1, self.q2, self.q3, self.q4]
@@ -205,14 +213,41 @@ class Agent():
 class Actor(nn.Module):
     def __init__(self):
         super(Actor, self).__init__()
-        self.fc1 = nn.Linear(8, 160) # Q4 + E4 = 8
-        self.fc2 = nn.Linear(160, 80)
-        self.fc3 = nn.Linear(80, 4)
+        self.fc1_1 = nn.Linear(8, 160) # Q4 + E4 = 8
+        self.fc2_1 = nn.Linear(160, 80)
+        self.fc3_1 = nn.Linear(80, 1)
+        
+        self.fc1_2 = nn.Linear(8, 160) # Q4 + E4 = 8
+        self.fc2_2 = nn.Linear(160, 80)
+        self.fc3_2 = nn.Linear(80, 1)
+        
+        self.fc1_3 = nn.Linear(8, 160) # Q4 + E4 = 8
+        self.fc2_3 = nn.Linear(160, 80)
+        self.fc3_3 = nn.Linear(80, 1)
+        
+        self.fc1_4 = nn.Linear(8, 160) # Q4 + E4 = 8
+        self.fc2_4 = nn.Linear(160, 80)
+        self.fc3_4 = nn.Linear(80, 1)
         
     def forward(self, x):
-        x = F.sigmoid(self.fc1(x))
-        x = F.sigmoid(self.fc2(x))
-        x = self.fc3(x)
+        x1 = F.sigmoid(self.fc1_1(x))
+        x1 = F.sigmoid(self.fc2_1(x1))
+        x1 = self.fc3_1(x1)
+        
+        x2 = F.sigmoid(self.fc1_2(x))
+        x2 = F.sigmoid(self.fc2_2(x2))
+        x2 = self.fc3_2(x2)
+        
+        x3 = F.sigmoid(self.fc1_3(x))
+        x3 = F.sigmoid(self.fc2_3(x3))
+        x3 = self.fc3_3(x3)
+        
+        x4 = F.sigmoid(self.fc1_4(x))
+        x4 = F.sigmoid(self.fc2_4(x4))
+        x4 = self.fc3_4(x4)
+        
+        x = t.cat((x1, x2, x3, x4))
+        x = F.sigmoid(x)
         return x
     
 class Critic(nn.Module):
@@ -233,10 +268,10 @@ final_result = []
   
 criterion = nn.MSELoss()  
 actor = Actor()
-actor_optimizer = optim.Adagrad(actor.parameters(), lr=0.01)
+actor_optimizer = optim.Adadelta(actor.parameters())
 
 critic = Critic()
-critic_optimizer = optim.Adagrad(critic.parameters(), lr=0.01) 
+critic_optimizer = optim.Adadelta(critic.parameters()) 
 
 env = ENV()
 s = env.reset()
@@ -247,10 +282,10 @@ while True:
     critic_input1 = t.cat((s,a))
 
     critic_output = critic(critic_input1)
-    actor_optimizer.zero_grad()
-    actor_loss = criterion(critic_output, V(t.Tensor([0]), requires_grad=False))
-    actor_loss.backward(retain_graph=True)
-    actor_optimizer.step()
+    #actor_optimizer.zero_grad()
+    #actor_loss = criterion(critic_output, V(t.Tensor([-7]), requires_grad=False))
+    #actor_loss.backward(retain_graph=True)
+    #actor_optimizer.step()
     ns, r, done = env.step(a.data.numpy().tolist())
     if r > max_score:
         max_score = r
@@ -260,19 +295,20 @@ while True:
     if done == True:
         break
     ns = V(t.Tensor(ns), requires_grad=True)
-    a = actor(ns)
-    list_s = s.data.numpy().tolist()
-    list_a = a.data.numpy().tolist()
+    na = actor(ns)
+    list_s = ns.data.numpy().tolist()
+    list_a = na.data.numpy().tolist()
     list_s.extend(list_a)
     
     critic_input2 = V(t.Tensor(list_s), volatile=True)
     critic_target = r + gamma*critic(critic_input2)
     critic_loss = criterion(critic_output, critic_target)
     critic_optimizer.zero_grad()
+    actor_optimizer.zero_grad()
     critic_loss.backward()
     critic_optimizer.step()
-
-    
+    actor_optimizer.step()
+    s = ns
 
 
 
